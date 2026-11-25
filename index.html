@@ -327,13 +327,20 @@ let py,cur=0,done=new Set();
 try{JSON.parse(localStorage.getItem('done2')||'[]').forEach(i=>done.add(i))}catch(e){}
 try{const t=localStorage.getItem('theme');if(t)document.documentElement.dataset.theme=t}catch(e){}
 $('th').onclick=()=>{const d=document.documentElement;const dark=d.dataset.theme?d.dataset.theme==='dark':matchMedia('(prefers-color-scheme:dark)').matches;d.dataset.theme=dark?'light':'dark';try{localStorage.setItem('theme',d.dataset.theme)}catch(e){}};
-const ready=(async()=>{try{py=await loadPyodide();$('st').textContent='Python ready ✓';setTimeout(()=>$('st').style.display='none',2500)}catch(e){$('st').textContent='Could not load Python. Check your connection.'}})();
+let pyErr='';
+const slow=setTimeout(()=>{if(!py)$('st').textContent='Still loading Python… (first load can take a while)'},15000);
+const ready=(async()=>{try{
+  if(typeof loadPyodide!=='function')throw new Error('pyodide.js was blocked or did not load');
+  py=await loadPyodide({indexURL:'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/'});
+  clearTimeout(slow);$('st').textContent='Python ready ✓';setTimeout(()=>$('st').style.display='none',2500)
+}catch(e){pyErr=String(e&&e.message||e);$('st').textContent='Python failed to load: '+pyErr;console.error(e)}})();
+function noPy(out){out.className='out bad';out.textContent='Python could not load: '+pyErr+'\nTry reloading the page, disabling ad blockers for this site, or checking that cdn.jsdelivr.net is reachable.'}
 const lastLine=e=>{const l=String(e.message).trim().split('\n');return l[l.length-1]};
 function mark(k){done.add(k);try{localStorage.setItem('done2',JSON.stringify([...done]))}catch(e){}drawNav()}
 
 async function run(code,check,out,key){
   out.className='out';out.textContent='Running…';
-  await ready;if(!py)return;
+  await ready;if(!py){noPy(out);return}
   const buf=[];py.setStdout({batched:s=>buf.push(s)});py.setStderr({batched:s=>buf.push(s)});
   const g=py.globals.get('dict')();let phase='run';
   try{
@@ -425,7 +432,7 @@ function lab(){
     card.querySelector('.at').textContent=Object.entries(d.attrs).map(([k,v])=>'self.'+k+' = '+v).join('\n');
     return d}
   bb.onclick=async()=>{
-    await ready;if(!py)return;box.innerHTML='';out.className='out';
+    await ready;if(!py){noPy(out);return}box.innerHTML='';out.className='out';
     if(g)g.destroy();g=py.globals.get('dict')();g.set('__name__','__main__');
     const buf=[];py.setStdout({batched:s=>buf.push(s)});
     try{py.runPython(ta.value,{globals:g});py.runPython(HELPER,{globals:g});py.runPython('_cls()',{globals:g});out.textContent='Class built ✓. Now create a pet.'}
